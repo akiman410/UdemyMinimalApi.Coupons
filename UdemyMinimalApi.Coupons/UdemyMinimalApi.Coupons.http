@@ -1,0 +1,6 @@
+@UdemyMinimalApi.Coupons_HostAddress = http://localhost:5288
+
+GET {{UdemyMinimalApi.Coupons_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
