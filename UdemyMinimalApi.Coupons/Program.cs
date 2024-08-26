@@ -29,33 +29,33 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.MapGet("/api/coupon", (ILogger<Program> _logger) =>
+app.MapGet("/api/coupon", (ApplicationDbContext _db, ILogger<Program> _logger) =>
 {
     APIResponse response = new();
 
     _logger.Log(LogLevel.Information, "Getting All Coupons");
 
-    response.Result = CouponStore.couponList;
+    response.Result = _db.Coupons;
     response.IsSuccess = true;
     response.StatusCode = HttpStatusCode.OK;
     return Results.Ok(response);
 
 }).WithName("Get Coupons").Produces<APIResponse>(200);
 
-app.MapGet("/api/coupon/{Id:int}", (ILogger<Program> _logger, int Id) =>
+app.MapGet("/api/coupon/{Id:int}", async (ApplicationDbContext _db, ILogger<Program> _logger, int Id) =>
 {
     APIResponse response = new();
 
     _logger.Log(LogLevel.Information, $"Get coupon for {Id}");
 
-    response.Result = CouponStore.couponList.FirstOrDefault(x => x.Id == Id);
+    response.Result = await _db.Coupons.FirstOrDefaultAsync(x => x.Id == Id);
     response.IsSuccess = true;
     response.StatusCode = HttpStatusCode.OK;
     return Results.Ok(response);
 
 }).WithName("Get Coupon").Produces<APIResponse>(200);
 
-app.MapPost("/api/coupon", async (IMapper _mapper, ILogger<Program> _logger, IValidator<CouponCreateDTO> _validation, [FromBody] CouponCreateDTO coupon_C_DTO) =>
+app.MapPost("/api/coupon", async (ApplicationDbContext _db, IMapper _mapper, ILogger<Program> _logger, IValidator<CouponCreateDTO> _validation, [FromBody] CouponCreateDTO coupon_C_DTO) =>
 {
     APIResponse response = new()
     {
@@ -72,15 +72,16 @@ app.MapPost("/api/coupon", async (IMapper _mapper, ILogger<Program> _logger, IVa
         response.ErrorMessages.Add(validationResult.Errors.FirstOrDefault()?.ToString() ?? string.Empty);
         return Results.BadRequest(response);
     }
-    if (CouponStore.couponList.FirstOrDefault(x => x.Name.ToLower() == coupon_C_DTO.Name.ToLower()) != null)
+    if (await _db.Coupons.FirstOrDefaultAsync(x => x.Name.ToLower() == coupon_C_DTO.Name.ToLower()) != null)
     {
         response.ErrorMessages.Add("Coupon Name already Exists : " + coupon_C_DTO.Name.ToUpper());
         return Results.BadRequest(response);
     }
     Coupon coupon = _mapper.Map<Coupon>(coupon_C_DTO);
 
-    coupon.Id = CouponStore.couponList.OrderByDescending(x => x.Id).FirstOrDefault().Id + 1;
-    CouponStore.couponList.Add(coupon);
+    //coupon.Id = _db.Coupons.OrderByDescending(x => x.Id).FirstOrDefault().Id + 1;
+    _db.Coupons.Add(coupon);
+    await _db.SaveChangesAsync();
 
     CouponDTO couponDTO = _mapper.Map<CouponDTO>(coupon);
 
@@ -98,7 +99,7 @@ app.MapPost("/api/coupon", async (IMapper _mapper, ILogger<Program> _logger, IVa
 
 
 
-app.MapPut("/api/coupon", async (IMapper _mapper, IValidator<CouponUpdateDTO> _validation, [FromBody] CouponUpdateDTO coupon_U_DTO) =>
+app.MapPut("/api/coupon", async (ApplicationDbContext _db, IMapper _mapper, IValidator<CouponUpdateDTO> _validation, [FromBody] CouponUpdateDTO coupon_U_DTO) =>
 {
     APIResponse response = new()
     {
@@ -114,27 +115,30 @@ app.MapPut("/api/coupon", async (IMapper _mapper, IValidator<CouponUpdateDTO> _v
         response.ErrorMessages.Add(validationResult.Errors.FirstOrDefault()?.ToString() ?? string.Empty);
         return Results.BadRequest(response);
     }
-    if (CouponStore.couponList.FirstOrDefault(x => x.Name.ToLower() == coupon_U_DTO.Name.ToLower()) != null)
+    if (await _db.Coupons.FirstOrDefaultAsync(x => x.Name.ToLower() == coupon_U_DTO.Name.ToLower()) != null)
     {
         response.ErrorMessages.Add("Coupon Name already Exists : " + coupon_U_DTO.Name.ToUpper());
         return Results.BadRequest(response);
     }
 
-    Coupon coupenFromStore = CouponStore.couponList.FirstOrDefault(u => u.Id == coupon_U_DTO.Id);
+    Coupon coupenFromStore = await _db.Coupons.FirstOrDefaultAsync(u => u.Id == coupon_U_DTO.Id);
     coupenFromStore.IsActive = coupon_U_DTO.IsActive;
     coupenFromStore.Name = coupon_U_DTO.Name;
     coupenFromStore.Percent = coupon_U_DTO.Percent;
     coupenFromStore.LastUpdated = DateTime.Now;
+
+    await _db.SaveChangesAsync();
 
     response.Result = _mapper.Map<CouponDTO>(coupenFromStore);
     response.IsSuccess = true;
     response.StatusCode = HttpStatusCode.OK;
     return Results.Ok(response);
 }
-).WithName("Update Coupon").Accepts<CouponUpdateDTO>("application/json").Produces<APIResponse>(200).Produces(400);
+).WithName("Update Coupon")
+.Accepts<CouponUpdateDTO>("application/json").Produces<APIResponse>(200).Produces(400);
 
 
-app.MapDelete("/api/coupon/{Id:int}", (int Id) =>
+app.MapDelete("/api/coupon/{Id:int}", async (ApplicationDbContext _db, int Id) =>
 {
     APIResponse response = new()
     {
@@ -143,10 +147,12 @@ app.MapDelete("/api/coupon/{Id:int}", (int Id) =>
         ErrorMessages = new List<string>()
     };
 
-    Coupon coupenFromStore = CouponStore.couponList.FirstOrDefault(u => u.Id == Id);
+    Coupon coupenFromStore = await _db.Coupons.FirstOrDefaultAsync(u => u.Id == Id);
     if (coupenFromStore != null)
     {
-        CouponStore.couponList.Remove(coupenFromStore);
+        _db.Coupons.Remove(coupenFromStore);
+        await _db.SaveChangesAsync();
+
         response.IsSuccess = true;
         response.StatusCode = HttpStatusCode.NoContent;
         return Results.Ok(response);
